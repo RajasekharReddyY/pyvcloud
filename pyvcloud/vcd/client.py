@@ -319,6 +319,7 @@ class EntityType(Enum):
         'application/vnd.vmware.admin.vmwExternalNetworkReferences+xml'
     INSTANTIATE_VAPP_TEMPLATE_PARAMS = \
         'application/vnd.vmware.vcloud.instantiateVAppTemplateParams+xml'
+    LDAP_SETTINGS = 'application/vnd.vmware.admin.organizationLdapSettings+xml'
     LEASE_SETTINGS = 'application/vnd.vmware.vcloud.leaseSettingsSection+xml'
     MEDIA = 'application/vnd.vmware.vcloud.media+xml'
     METADATA = 'application/vnd.vmware.vcloud.metadata+xml'

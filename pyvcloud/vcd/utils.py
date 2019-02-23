@@ -21,7 +21,8 @@ from os.path import realpath
 
 import humanfriendly
 from lxml import etree
-from lxml.objectify import NoneElement
+from lxml.objectify import NoneElement, ObjectifiedElement, StringElement, IntElement, BoolElement, LongElement, FloatElement
+from lxml import objectify
 from pygments import formatters
 from pygments import highlight
 from pygments import lexers
@@ -810,3 +811,66 @@ def build_network_url_from_gateway_url(gateway_href):
         return network_url.replace(_GATEWAY_ADMIN_API_URL, _NETWORK_URL)
 
     return None
+
+def dic_to_resource(parent_name, new_values_dict, elements_schema, current_resource = None):
+    """Build a objectified element for a given resource element model and dict
+
+    :param str parent_name: Parent element name where values to be added
+
+    :param dict new_values_dict: Dictionary containing new values
+
+    :param list elements_schema: Schema of the elements represented by parent element
+
+    :param object current_resource: Objectified element which contains the current values. This is used when a resource is updated
+
+    :return: an objectify element for dict
+
+    :rtype: lxml.objectify.ObjectifiedElement
+    """
+
+    # Create parent element
+    EParent = objectify.Element(parent_name)
+
+    # Flag use to report back whether at least one child has been added
+    flag = False
+
+    # Iterate through the elements schema to maintain the order
+    for e in elements_schema:
+        # Simple values
+        if isinstance(e, str):
+            if e in new_values_dict and new_values_dict[e] is not None:
+                EParent[e] = new_values_dict[e]
+                flag = True
+            elif current_resource.find("{http://www.vmware.com/vcloud/v1.5}" + e) is not None:
+                EParent[e] = current_resource.find("{http://www.vmware.com/vcloud/v1.5}" + e)
+                flag = True
+
+        # Elements containing sub-elements
+        if isinstance(e, dict):
+            # Only one element should be in dictionary
+            if len(e) == 0 or len(e) > 1:
+                raise Exception('Server error. Invalid elements schema')
+            for sub_element, sub_elements_schema in e.items():
+
+                if sub_element in new_values_dict:
+                    sub_element_new_values = new_values_dict[sub_element]
+                else:
+                    sub_element_new_values = {}
+
+                if current_resource.find("{http://www.vmware.com/vcloud/v1.5}" + sub_element) is not None:
+                    sub_element_existing_values = current_resource.find("{http://www.vmware.com/vcloud/v1.5}" + sub_element)
+                else:
+                    sub_element_existing_values = None
+
+                # Convert the sub element dictionary to a resource
+                (sub_element_resoure, flag) = dic_to_resource(sub_element, sub_element_new_values, sub_elements_schema, sub_element_existing_values)
+
+                # Only add the resource if subelemet has been added.
+                if flag:
+                    EParent.append(sub_element_resoure)
+
+    # Clean objectify element to remove namespaces
+    objectify.deannotate(EParent)
+    etree.cleanup_namespaces(EParent)
+
+    return (EParent, flag)

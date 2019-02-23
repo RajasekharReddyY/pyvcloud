@@ -21,6 +21,8 @@ import tempfile
 import time
 import traceback
 import urllib
+import pyvcloud.vcd.utils as Utils
+import pyvcloud.vcd.elements as Elements
 
 from lxml import etree
 from lxml import objectify
@@ -39,6 +41,7 @@ from pyvcloud.vcd.client import ResourceType
 from pyvcloud.vcd.exceptions import DownloadException
 from pyvcloud.vcd.exceptions import EntityNotFoundException
 from pyvcloud.vcd.exceptions import InvalidParameterException
+from pyvcloud.vcd.exceptions import MissingParametersError
 from pyvcloud.vcd.exceptions import UploadException
 from pyvcloud.vcd.system import System
 from pyvcloud.vcd.utils import get_admin_href
@@ -1579,3 +1582,171 @@ class Org(object):
         for v in get_links(self.resource, media_type=EntityType.VDC.value):
             result.append({'name': v.name, 'href': v.href})
         return result
+
+    def get_ldap_settings(self):
+        """Retrieve LDAP setting for the organization
+
+        :return: an object containing EntityType.LDAP_SETTINGS XML data representing
+            the organization LDAP configuration.
+
+        :rtype: lxml.objectify.ObjectifiedElement
+        """
+
+        if self.resource is None:
+            self.reload()
+
+        # Collect the admin resource for organization
+        resource_admin = self.client.get_resource(self.href_admin)
+
+        # Get settings resource
+        resource_settings = resource_admin.find('{http://www.vmware.com/vcloud/v1.5}Settings')
+
+        # Find the link for LDAP settings
+        links = get_links(
+            resource_settings,
+            rel=RelationType.DOWN,
+            media_type=EntityType.LDAP_SETTINGS.value)
+
+        # Should be only one link returned
+        href_ldap_settings = links[0].href
+
+        return self.client.get_resource(href_ldap_settings)
+
+
+    def update_ldap_settings(self,
+                             ldap_mode,
+                             sys_users_ou=None,
+                             cus_hostname=None,
+                             cus_port=None,
+                             cus_isssl=None,
+                             cus_isssl_accept_all=None,
+                             cus_search_base=None,
+                             cus_username=None,
+                             cus_auth_mechanism=None,
+                             cus_is_group_search_based_enabled=None,
+                             cus_connector_type=None,
+                             cus_user_object_class=None,
+                             cus_user_object_identifier=None,
+                             cus_user_username=None,
+                             cus_user_email=None,
+                             cus_user_full_name=None,
+                             cus_user_given_name=None,
+                             cus_user_surname=None,
+                             cus_user_telephone=None,
+                             cus_user_group_membership_identifier=None,
+                             cus_user_group_back_link_identifier=None,
+                             cus_group_object_class=None,
+                             cus_group_group_name=None,
+                             cus_group_membership=None,
+                             cus_group_membership_identifier=None,
+                             cus_group_back_link_identifier=None,
+                             cus_use_external_kerberos=None
+                             ):
+        """Update LDAP setting for the organization
+
+        :param str ldap_mode: Valid values NONE, SYSTEM, CUSTOM.
+        :param str sys_user_ou: Distinguished name for OU Ex: ou=Users,dc=example,dc=local
+        :param str cus_hostname: LDAP server hostname
+        :param str cus_port: LDAP server port
+        :param str cus_isssl: Is ssl enabled
+        :param str cus_isssl_accept_all: Accept any certificate
+        :param str cus_search_base: Base distinguished name
+        :param str cus_auth_mechanism: Authentication method SIMPLE, KERBEROS
+        :param str cus_is_group_search_based_enabled: SSPI
+        :param str cus_connector_type: Connector type to use OPEN_LDAP
+        :param str cus_user_object_class: User object class
+        :param str cus_user_object_identifier: User unique identifier
+        :param str cus_user_username: user username
+        :param str cus_user_email: user email
+        :param str cus_user_full_name: user display name
+        :param str cus_user_given_name: user given name
+        :param str cus_user_surname: user sername
+        :param str cus_user_telephone: user telephone
+        :param str cus_user_group_membership_identifier: user group membership identifier
+        :param str cus_user_group_back_link_identifier: user group back link
+        :param str cus_group_object_class: group object class
+        :param str cus_group_membership: group membership
+        :param str cus_group_membership_identifier: group membership identifier
+        :param str cus_group_back_link_identifier: group back link identifier
+        :param str cus_use_external_kerberos: whether to use external kerberos
+
+        :return: an object containing EntityType.LDAP_SETTINGS XML data representing
+            the organization LDAP configuration.
+
+        :rtype: lxml.objectify.ObjectifiedElement
+        """
+
+        if self.resource is None:
+            self.reload()
+
+        # Collect the admin resource for organization
+        resource_admin = self.client.get_resource(self.href_admin)
+
+        # Get settings resource
+        resource_settings = resource_admin.find('{http://www.vmware.com/vcloud/v1.5}Settings')
+
+        # Find the link for LDAP settings
+        links = get_links(
+            resource_settings,
+            rel=RelationType.DOWN,
+            media_type=EntityType.LDAP_SETTINGS.value)
+
+        # Should be only one link returned
+        if len(links) != 1:
+            raise Exception
+        else:
+            href_ldap_settings = links[0].href
+
+        # Retrieve current settings
+        current_ldap_settings = self.get_ldap_settings()
+
+        # Make new settings same as current settings
+        new_ldap_settings = current_ldap_settings
+        new_ldap_settings['OrgLdapMode'] = E.OrgLdapMode(ldap_mode)
+
+        # LDAP Mode SYSTEM
+        if ldap_mode is 'SYSTEM':
+            current_ldap_settings['CustomUsersOu'] = sys_users_ou
+
+        # LDAP Mode CUSTOM
+        if ldap_mode is 'CUSTOM':
+
+            # Extract the Objectified Element of current custom ldap settings
+            current_ldap_custom_settings = current_ldap_settings.find('{http://www.vmware.com/vcloud/v1.5}CustomOrgLdapSettings')
+
+            # Prepare new ldap custom settings dictionary
+            new_ldap_custom_settings =  {   'HostName': cus_hostname,
+                                            'Port': cus_port,
+                                            'IsSsl': cus_isssl,
+                                            'IsSslAcceptAll': cus_isssl_accept_all,
+                                            'SearchBase': cus_search_base,
+                                            'UserName': cus_username,
+                                            'AuthenticationMechanism': cus_auth_mechanism,
+                                            'IsGroupSearchBaseEnabled': cus_is_group_search_based_enabled,
+                                            'ConnectorType': cus_connector_type,
+                                            'UserAttributes': {
+                                                'ObjectClass': cus_user_object_class,
+                                                'ObjectIdentifier': cus_user_object_identifier,
+                                                'UserName': cus_user_username,
+                                                'Email': cus_user_email,
+                                                'FullName': cus_user_full_name,
+                                                'GivenName': cus_user_given_name,
+                                                'Surname': cus_user_surname,
+                                                'Telephone': cus_user_telephone,
+                                                'GroupMembershipIdentifier': cus_user_group_membership_identifier,
+                                                'GroupBackLinkIdentifier': cus_user_group_back_link_identifier
+                                            },
+                                            'GroupAttributes': {
+                                                'ObjectClass': cus_group_object_class,
+                                                'GroupName': cus_group_group_name,
+                                                'Membership': cus_group_membership,
+                                                'MembershipIdentifier': cus_group_membership_identifier,
+                                                'BackLinkIdentifier': cus_group_back_link_identifier
+                                            },
+                                            'UseExternalKerberos': cus_use_external_kerberos}
+
+            # Generate CustomOrgLdapSettings Objectified Elelment and set in new resource
+            (objectified_custom_ldap_settings,flag) = Utils.dic_to_resource('CustomOrgLdapSettings',new_ldap_custom_settings,Elements.LDAP_CUSTOM_SETTINGS,current_ldap_custom_settings)
+            new_ldap_settings['CustomOrgLdapSettings'] = objectified_custom_ldap_settings
+
+        return self.client.put_resource(href_ldap_settings,new_ldap_settings,EntityType.LDAP_SETTINGS.value)
